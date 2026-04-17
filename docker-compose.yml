@@ -1,0 +1,45 @@
+version: '3.8'
+
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+      args:
+        # Example build arg, adjust as needed
+        NODE_ENV: development
+    ports:
+      - "3000:80"
+    volumes:
+      - ./app/frontend:/app
+    environment:
+      # Example environment variable
+      API_URL: http://localhost:8000/api
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app/backend:/app
+    environment:
+      # Example environment variable
+      DATABASE_URL: sqlite:///./sql_app.db
+
+  nginx:
+    image: nginx:stable-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      # Placeholder for SSL certificates - will be mounted in production
+      # - ./ssl:/etc/nginx/ssl
+    depends_on:
+      - frontend
+      - backend
