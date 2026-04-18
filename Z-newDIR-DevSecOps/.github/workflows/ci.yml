@@ -1,0 +1,122 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-and-scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write # For uploading SARIF files
+      actions: read # For actions/attest-build-provenance
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js (for frontend linting)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup Python (for backend linting)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install Python dependencies
+        run: pip install -r app/backend/requirements.txt
+
+      - name: Run Frontend Lint (Example - adjust for your actual frontend framework)
+        # For a simple HTML/JS frontend, linting might be minimal or use a different tool
+        run: echo "Frontend linting placeholder"
+
+      - name: Run Backend Lint (Flake8 example)
+        run: pip install flake8 && flake8 app/backend/
+
+      - name: Run SAST with Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          publishToken: ${{ secrets.SEMGREP_APP_TOKEN }}
+          publishDeployment: ${{ secrets.SEMGREP_DEPLOYMENT_ID }}
+          # Optional: Add custom rules or configurations
+          # config: p/python p/javascript
+
+      - name: Run Secret Scanning with Gitleaks
+        uses: zricethezav/gitleaks-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run Hadolint (Dockerfile linting)
+        uses: reviewdog/action-hadolint@v1
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          reporter: github-pr-review
+          filter_mode: nofilter
+          hadolint_flags: "--no-fail Dockerfile.frontend Dockerfile.backend"
+
+      - name: Build Docker Images
+        run: |
+          docker build -t securedock-frontend -f docker/Dockerfile.frontend .
+          docker build -t securedock-backend -f docker/Dockerfile.backend .
+
+      - name: Run Trivy vulnerability scan (Frontend Image)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'securedock-frontend'
+          format: 'sarif'
+          output: 'trivy-frontend-results.sarif'
+          severity: 'HIGH,CRITICAL'
+
+      - name: Upload Trivy scan results to GitHub Security tab (Frontend)
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-frontend-results.sarif
+
+      - name: Run Trivy vulnerability scan (Backend Image)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'securedock-backend'
+          format: 'sarif'
+          output: 'trivy-backend-results.sarif'
+          severity: 'HIGH,CRITICAL'
+
+      - name: Upload Trivy scan results to GitHub Security tab (Backend)
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-backend-results.sarif
+
+      - name: Generate SBOM (Frontend)
+        uses: anchore/syft-action@v0.1.0
+        with:
+          image: securedock-frontend
+          format: spdx-json
+          output: sbom-frontend.spdx.json
+
+      - name: Generate SBOM (Backend)
+        uses: anchore/syft-action@v0.1.0
+        with:
+          image: securedock-backend
+          format: spdx-json
+          output: sbom-backend.spdx.json
+
+      - name: Upload SBOMs as artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: sboms
+          path: |
+            sbom-frontend.spdx.json
+            sbom-backend.spdx.json
+
+      # Optional: Run unit tests here
+      # - name: Run Frontend Tests
+      #   run: npm test
+
+      # - name: Run Backend Tests
+      #   run: python -m unittest discover -s app/backend/tests

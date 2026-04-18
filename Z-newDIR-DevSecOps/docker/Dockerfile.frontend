@@ -1,0 +1,23 @@
+FROM node:20-alpine as builder
+
+WORKDIR /app
+
+COPY app/frontend/package*.json ./
+RUN npm install
+
+COPY app/frontend/ ./
+# For a simple static site, we don't need a build step, just copy the files
+# If you had a build step (e.g., for React/Vue), it would be here:
+# RUN npm run build
+
+FROM nginx:stable-alpine
+
+# Copy the static files from the builder stage
+COPY --from=builder /app /usr/share/nginx/html
+
+# Copy Nginx configuration
+COPY nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf
+COPY nginx/nginx.conf /etc/nginx/nginx.conf
+
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]

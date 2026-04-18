@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SecureDock Frontend</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            background-color: #fff;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 20px;
+        }
+        p {
+            font-size: 1.1em;
+            line-height: 1.6;
+        }
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1em;
+            margin-top: 20px;
+        }
+        button:hover {
+            background-color: #2980b9;
+        }
+        #apiResponse {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #ecf0f1;
+            border-left: 5px solid #3498db;
+            text-align: left;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Welcome to SecureDock!</h1>
+        <p>This is a simple frontend application demonstrating the SecureDock platform.</p>
+        <button id="fetchApi">Fetch Data from Backend API</button>
+        <div id="apiResponse"></div>
+    </div>
+
+    <script>
+        document.getElementById("fetchApi").addEventListener("click", async () => {
+            const apiResponseDiv = document.getElementById("apiResponse");
+            apiResponseDiv.textContent = "Fetching data...";
+            try {
+                // Note: Nginx is configured to proxy /api/ to the backend
+                const response = await fetch("/api/hello");
+                const data = await response.json();
+                apiResponseDiv.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                apiResponseDiv.textContent = `Error: ${error.message}. Make sure the backend is running and accessible via /api/hello.`;
+                console.error("Error fetching API:", error);
+            }
+        });
+    </script>
+</body>
+</html>
