@@ -55,7 +55,7 @@ jobs:
           push-to-registry: true
 
       - name: Sign Frontend Image with Cosign
-        uses: sigstore/cosign-installer/upload-cosign-artifact@v3.0.6
+        uses: sigstore/cosign-installer/upload-cosign-artifact@v3.0.0
         with:
           cosign-release: v2.2.0
           artifact: ${{ steps.push-frontend.outputs.digest }}
@@ -87,7 +87,7 @@ jobs:
           push-to-registry: true
 
       - name: Sign Backend Image with Cosign
-        uses: sigstore/cosign-installer/upload-cosign-artifact@v3.0.6
+        uses: sigstore/cosign-installer/upload-cosign-artifact@v3.0.0
         with:
           cosign-release: v2.2.0
           artifact: ${{ steps.push-backend.outputs.digest }}
