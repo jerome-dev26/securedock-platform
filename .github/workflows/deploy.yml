@@ -2,10 +2,8 @@ name: CD Pipeline
 
 on:
   push:
-    branches:
-      - main
-    tags:
-      - 'v*.*.*' # Push events to v1.0.0, v2.0.0, etc. tags
+    branches: [ main ]
+    tags: [ 'v*.*.*' ]
 
 env:
   REGISTRY: ghcr.io
@@ -17,8 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write # To push images to GHCR
-      id-token: write # For Sigstore/Cosign
+      packages: write
+      id-token: write   # Required for GitHub OIDC (even with key-based cosign)
 
     steps:
       - name: Checkout code
@@ -31,15 +29,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels) for Docker images
+      # ==================== FRONTEND ====================
+      - name: Extract metadata for Frontend
         id: meta-frontend
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME_FRONTEND }}
 
-      - name: Build and push Docker image (Frontend)
+      - name: Build and push Frontend Docker image
         id: push-frontend
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile.frontend
@@ -47,43 +46,16 @@ jobs:
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
 
-      - name: Generate Frontend Image Attestation
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME_FRONTEND }}
-          subject-digest: ${{ steps.push-frontend.outputs.digest }}
-          push-to-registry: true
-
-      ##############################
-      - name: Install Cosign
-        uses: sigstore/cosign-installer@v4.1.0
-
-      - name: Sign Frontend Image with Cosign
-        run: |
-          cosign sign --yes --key env://COSIGN_PRIVATE_KEY \
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME_FRONTEND }}@${{ steps.push-frontend.outputs.digest }}
-        env:
-          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
-          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
-      ##############################
-      #- name: Sign Frontend Image with Cosign
-      #  uses: sigstore/cosign-installer/upload-cosign-artifact@v3.0.0
-      #  with:
-       #   cosign-release: v2.2.0
-       #   artifact: ${{ steps.push-frontend.outputs.digest }}
-          # Your Cosign key/password would be configured here via secrets
-          # cosign-key: ${{ secrets.COSIGN_PRIVATE_KEY }}
-          # cosign-password: ${{ secrets.COSIGN_PASSWORD }}
-
-      - name: Extract metadata (tags, labels) for Docker images
+      # ==================== BACKEND ====================
+      - name: Extract metadata for Backend
         id: meta-backend
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME_BACKEND }}
 
-      - name: Build and push Docker image (Backend)
+      - name: Build and push Backend Docker image
         id: push-backend
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: docker/Dockerfile.backend
@@ -91,37 +63,43 @@ jobs:
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
 
-      - name: Generate Backend Image Attestation
-        uses: actions/attest-build-provenance@v1
-        with:
-          subject-name: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME_BACKEND }}
-          subject-digest: ${{ steps.push-backend.outputs.digest }}
-          push-to-registry: true
-          
-      ##############################################
+      # ==================== COSIGN & SBOM ====================
       - name: Install Cosign
         uses: sigstore/cosign-installer@v4.1.0
 
-      - name: Sign Frontend Image with Cosign
+      - name: Sign Frontend Image with Cosign (Traditional Key)
         run: |
-          cosign sign --yes --key env://COSIGN_PRIVATE_KEY \
+          cosign sign --key env://COSIGN_PRIVATE_KEY \
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME_FRONTEND }}@${{ steps.push-frontend.outputs.digest }}
         env:
           COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
           COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
 
-        ############################################
-    #  - name: Sign Backend Image with Cosign
-     #   uses: sigstore/cosign-installer/upload-cosign-artifact@v3.0.0
-    #    with:
-    #      cosign-release: v2.2.0
-    #      artifact: ${{ steps.push-backend.outputs.digest }}
-          # Your Cosign key/password would be configured here via secrets
-          # cosign-key: ${{ secrets.COSIGN_PRIVATE_KEY }}
-          # cosign-password: ${{ secrets.COSIGN_PASSWORD }}
+      - name: Generate SBOM for Frontend
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME_FRONTEND }}@${{ steps.push-frontend.outputs.digest }}
+          format: spdx-json
+          output-file: frontend-sbom.spdx.json
 
+      - name: Sign Backend Image with Cosign (Traditional Key)
+        run: |
+          cosign sign --key env://COSIGN_PRIVATE_KEY \
+            ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME_BACKEND }}@${{ steps.push-backend.outputs.digest }}
+        env:
+          COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
+          COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+
+      - name: Generate SBOM for Backend
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME_BACKEND }}@${{ steps.push-backend.outputs.digest }}
+          format: spdx-json
+          output-file: backend-sbom.spdx.json
+
+      # ==================== DEPLOY TO EC2 ====================
       - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1.0.0
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
