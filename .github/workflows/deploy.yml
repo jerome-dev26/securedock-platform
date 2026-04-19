@@ -98,13 +98,46 @@ jobs:
           output-file: backend-sbom.spdx.json
 
       # ==================== Deploy to EC2 ====================
+
+
+           # ==================== Deploy to EC2 ====================
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          timeout: 30s
+          command_timeout: 5m
+          debug: false
           script: |
-            cd /home/ubuntu/securedock-platform
+            echo "🔄 Starting deployment..."
+
+            # Create directory if it doesn't exist
+            mkdir -p /home/${{ secrets.EC2_USERNAME }}/securedock-platform
+
+            # Go to the project directory
+            cd /home/${{ secrets.EC2_USERNAME }}/securedock-platform
+
+            # Clone or pull latest code (recommended approach)
+            if [ ! -d ".git" ]; then
+              echo "📥 Cloning repository for the first time..."
+              git clone https://github.com/${{ github.repository_owner }}/securedock-platform.git .
+            else
+              echo "⬇️  Pulling latest changes..."
+              git pull origin main
+            fi
+
+            # Make sure deploy script exists and is executable
             chmod +x scripts/deploy.sh
-            ./scripts/deploy.sh ${{ github.repository_owner }} ${{ env.IMAGE_NAME_FRONTEND }} ${{ env.IMAGE_NAME_BACKEND }} ${{ github.sha }} ${{ secrets.DOMAIN_NAME }}
+
+            # Run the deployment script
+            echo "🚀 Running deployment script..."
+            ./scripts/deploy.sh \
+              ${{ github.repository_owner }} \
+              ${{ env.IMAGE_NAME_FRONTEND }} \
+              ${{ env.IMAGE_NAME_BACKEND }} \
+              ${{ github.sha }} \
+              ${{ secrets.DOMAIN_NAME }}
+
+            echo "✅ Deployment completed successfully!"
