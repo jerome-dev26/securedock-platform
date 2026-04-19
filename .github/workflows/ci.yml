@@ -2,19 +2,18 @@ name: CI Pipeline
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build-and-scan:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write # For uploading SARIF files
-      actions: read # For actions/attest-build-provenance
+      security-events: write   # For uploading SARIF files (Trivy)
+      actions: read
+      contents: write          # Required for anchore/sbom-action to upload artifacts
 
     steps:
       - name: Checkout code
@@ -33,11 +32,10 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r app/backend/requirements.txt
 
-      - name: Run Frontend Lint (Example - adjust for your actual frontend framework)
-        # For a simple HTML/JS frontend, linting might be minimal or use a different tool
+      - name: Run Frontend Lint (placeholder)
         run: echo "Frontend linting placeholder"
 
-      - name: Run Backend Lint (Flake8 example)
+      - name: Run Backend Lint (Flake8)
         run: pip install flake8 && flake8 app/backend/
 
       - name: Run SAST with Semgrep
@@ -45,8 +43,6 @@ jobs:
         with:
           publishToken: ${{ secrets.SEMGREP_APP_TOKEN }}
           publishDeployment: ${{ secrets.SEMGREP_DEPLOYMENT_ID }}
-          # Optional: Add custom rules or configurations
-          # config: p/python p/javascript
 
       - name: Run Secret Scanning with Gitleaks
         uses: zricethezav/gitleaks-action@v1
@@ -59,52 +55,55 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           reporter: github-pr-review
           filter_mode: nofilter
-          hadolint_flags: "--no-fail Dockerfile.frontend Dockerfile.backend"
+          hadolint_flags: "--no-fail docker/Dockerfile.frontend docker/Dockerfile.backend"
 
+      # Build Docker images with proper tags
       - name: Build Docker Images
         run: |
-          docker build -t securedock-frontend -f docker/Dockerfile.frontend .
-          docker build -t securedock-backend -f docker/Dockerfile.backend .
+          docker build -t securedock-frontend:${{ github.sha }} -f docker/Dockerfile.frontend .
+          docker build -t securedock-backend:${{ github.sha }} -f docker/Dockerfile.backend .
 
-      - name: Run Trivy vulnerability scan (Frontend Image)
-        uses: aquasecurity/trivy-action@master
+      # Trivy scans
+      - name: Run Trivy vulnerability scan (Frontend)
+        uses: aquasecurity/trivy-action@v0.29.0
         with:
-          image-ref: 'securedock-frontend'
+          image-ref: 'securedock-frontend:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-frontend-results.sarif'
           severity: 'HIGH,CRITICAL'
 
-      - name: Upload Trivy scan results to GitHub Security tab (Frontend)
+      - name: Upload Trivy scan results (Frontend)
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-frontend-results.sarif
 
-      - name: Run Trivy vulnerability scan (Backend Image)
-        uses: aquasecurity/trivy-action@master
+      - name: Run Trivy vulnerability scan (Backend)
+        uses: aquasecurity/trivy-action@v0.29.0
         with:
-          image-ref: 'securedock-backend'
+          image-ref: 'securedock-backend:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-backend-results.sarif'
           severity: 'HIGH,CRITICAL'
 
-      - name: Upload Trivy scan results to GitHub Security tab (Backend)
+      - name: Upload Trivy scan results (Backend)
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-backend-results.sarif
 
-      - name: Generate SBOM (Frontend)
-        uses: anchore/syft-action@v0.1.0
+      # ==================== SBOM Generation (Fixed) ====================
+      - name: Generate SBOM for Frontend
+        uses: anchore/sbom-action@v0
         with:
-          image: securedock-frontend
+          image: securedock-frontend:${{ github.sha }}
           format: spdx-json
-          output: sbom-frontend.spdx.json
+          output-file: sbom-frontend.spdx.json
 
-      - name: Generate SBOM (Backend)
-        uses: anchore/syft-action@v0.1.0
+      - name: Generate SBOM for Backend
+        uses: anchore/sbom-action@v0
         with:
-          image: securedock-backend
+          image: securedock-backend:${{ github.sha }}
           format: spdx-json
-          output: sbom-backend.spdx.json
+          output-file: sbom-backend.spdx.json
 
       - name: Upload SBOMs as artifacts
         uses: actions/upload-artifact@v4
@@ -113,10 +112,4 @@ jobs:
           path: |
             sbom-frontend.spdx.json
             sbom-backend.spdx.json
-
-      # Optional: Run unit tests here
-      # - name: Run Frontend Tests
-      #   run: npm test
-
-      # - name: Run Backend Tests
       #   run: python -m unittest discover -s app/backend/tests
