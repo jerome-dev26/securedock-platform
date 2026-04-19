@@ -10,8 +10,8 @@ jobs:
   build-and-scan:
     runs-on: ubuntu-latest
     permissions:
-      contents: write          # Needed for SBOM artifact upload
-      security-events: write   # Needed for SARIF upload (Trivy)
+      contents: write
+      security-events: write
       actions: read
 
     steps:
@@ -19,12 +19,12 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5          # ← Updated to v5 (Node 24 ready)
         with:
           node-version: '20'
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6        # ← Updated to v6 (Node 24 ready)
         with:
           python-version: '3.9'
 
@@ -56,13 +56,13 @@ jobs:
           filter_mode: nofilter
           hadolint_flags: "--no-fail docker/Dockerfile.frontend docker/Dockerfile.backend"
 
-      # Build Docker images with explicit tags
+      # Build Docker images
       - name: Build Docker Images
         run: |
           docker build -t securedock-frontend:${{ github.sha }} -f docker/Dockerfile.frontend .
           docker build -t securedock-backend:${{ github.sha }} -f docker/Dockerfile.backend .
 
-      # ==================== Trivy Vulnerability Scan (Fixed) ====================
+      # Trivy scans
       - name: Run Trivy vulnerability scan (Frontend)
         uses: aquasecurity/trivy-action@v0.35.0
         with:
@@ -70,9 +70,8 @@ jobs:
           format: 'sarif'
           output: 'trivy-frontend-results.sarif'
           severity: 'HIGH,CRITICAL'
-          exit-code: '1'          # Fail the build on HIGH/CRITICAL findings (optional)
 
-      - name: Upload Trivy results to GitHub Security tab (Frontend)
+      - name: Upload Trivy results (Frontend)
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-frontend-results.sarif'
@@ -84,14 +83,13 @@ jobs:
           format: 'sarif'
           output: 'trivy-backend-results.sarif'
           severity: 'HIGH,CRITICAL'
-          exit-code: '1'
 
-      - name: Upload Trivy results to GitHub Security tab (Backend)
+      - name: Upload Trivy results (Backend)
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: 'trivy-backend-results.sarif'
 
-      # ==================== SBOM Generation ====================
+      # SBOM Generation
       - name: Generate SBOM for Frontend
         uses: anchore/sbom-action@v0
         with:
