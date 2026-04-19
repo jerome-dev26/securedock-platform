@@ -20,7 +20,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5          # Updated to v5 for Node 24
+        uses: actions/checkout@v5        # Updated to v5 (Node 24 ready)
 
       - name: Log in to the Container registry
         uses: docker/login-action@v4
