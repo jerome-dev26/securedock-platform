@@ -41,10 +41,10 @@ jobs:
         uses: returntocorp/semgrep-action@v1
         with:
           publishToken: ${{ secrets.SEMGREP_APP_TOKEN }}
-          # publishDeployment removed - it was invalid
 
+      # Updated Gitleaks to latest v2 (fixes set-output deprecation)
       - name: Run Secret Scanning with Gitleaks
-        uses: zricethezav/gitleaks-action@v1
+        uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -62,7 +62,7 @@ jobs:
           docker build -t securedock-frontend:${{ github.sha }} -f docker/Dockerfile.frontend .
           docker build -t securedock-backend:${{ github.sha }} -f docker/Dockerfile.backend .
 
-      # ==================== Trivy Scans ====================
+      # Trivy scans
       - name: Run Trivy vulnerability scan (Frontend)
         uses: aquasecurity/trivy-action@v0.35.0
         with:
@@ -75,7 +75,7 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-frontend-results.sarif'
-          category: trivy-frontend   # Unique category required
+          category: trivy-frontend
 
       - name: Run Trivy vulnerability scan (Backend)
         uses: aquasecurity/trivy-action@v0.35.0
@@ -89,9 +89,9 @@ jobs:
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-backend-results.sarif'
-          category: trivy-backend    # Unique category required
+          category: trivy-backend
 
-      # ==================== SBOM Generation ====================
+      # SBOM Generation
       - name: Generate SBOM for Frontend
         uses: anchore/sbom-action@v0
         with:
