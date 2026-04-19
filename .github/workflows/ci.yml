@@ -9,28 +9,21 @@ on:
 jobs:
   build-and-scan:
     runs-on: ubuntu-latest
-    #permissions:
-    #  contents: read
-    #  security-events: write   # For uploading SARIF files (Trivy)
-    #  actions: read
-    #  contents: write          # Required for anchore/sbom-action to upload artifacts
-
     permissions:
-      contents: write           # Covers both read + write (needed for SBOM artifact upload)
-      security-events: write    # For Trivy SARIF upload
+      contents: write          # Needed for SBOM artifact upload
+      security-events: write   # Needed for SARIF upload (Trivy)
       actions: read
-
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Setup Node.js (for frontend linting)
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Setup Python (for backend linting)
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.9'
@@ -38,11 +31,11 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r app/backend/requirements.txt
 
-      - name: Run Frontend Lint (placeholder)
-        run: echo "Frontend linting placeholder"
-
       - name: Run Backend Lint (Flake8)
         run: pip install flake8 && flake8 app/backend/
+
+      - name: Run Frontend Lint (placeholder)
+        run: echo "Frontend linting placeholder"
 
       - name: Run SAST with Semgrep
         uses: returntocorp/semgrep-action@v1
@@ -63,40 +56,42 @@ jobs:
           filter_mode: nofilter
           hadolint_flags: "--no-fail docker/Dockerfile.frontend docker/Dockerfile.backend"
 
-      # Build Docker images with proper tags
+      # Build Docker images with explicit tags
       - name: Build Docker Images
         run: |
           docker build -t securedock-frontend:${{ github.sha }} -f docker/Dockerfile.frontend .
           docker build -t securedock-backend:${{ github.sha }} -f docker/Dockerfile.backend .
 
-      # Trivy scans
+      # ==================== Trivy Vulnerability Scan (Fixed) ====================
       - name: Run Trivy vulnerability scan (Frontend)
-        uses: aquasecurity/trivy-action@v0.29.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: 'securedock-frontend:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-frontend-results.sarif'
           severity: 'HIGH,CRITICAL'
+          exit-code: '1'          # Fail the build on HIGH/CRITICAL findings (optional)
 
-      - name: Upload Trivy scan results (Frontend)
+      - name: Upload Trivy results to GitHub Security tab (Frontend)
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: trivy-frontend-results.sarif
+          sarif_file: 'trivy-frontend-results.sarif'
 
       - name: Run Trivy vulnerability scan (Backend)
-        uses: aquasecurity/trivy-action@v0.29.0
+        uses: aquasecurity/trivy-action@v0.35.0
         with:
           image-ref: 'securedock-backend:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-backend-results.sarif'
           severity: 'HIGH,CRITICAL'
+          exit-code: '1'
 
-      - name: Upload Trivy scan results (Backend)
+      - name: Upload Trivy results to GitHub Security tab (Backend)
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: trivy-backend-results.sarif
+          sarif_file: 'trivy-backend-results.sarif'
 
-      # ==================== SBOM Generation (Fixed) ====================
+      # ==================== SBOM Generation ====================
       - name: Generate SBOM for Frontend
         uses: anchore/sbom-action@v0
         with:
@@ -118,4 +113,3 @@ jobs:
           path: |
             sbom-frontend.spdx.json
             sbom-backend.spdx.json
-      #   run: python -m unittest discover -s app/backend/tests
