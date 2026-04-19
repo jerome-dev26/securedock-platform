@@ -36,7 +36,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME_FRONTEND }}
 
-      - name: Build and push Frontend Docker image
+      - name: Build and push Frontend
         id: push-frontend
         uses: docker/build-push-action@v7
         with:
@@ -53,7 +53,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME_BACKEND }}
 
-      - name: Build and push Backend Docker image
+      - name: Build and push Backend
         id: push-backend
         uses: docker/build-push-action@v7
         with:
