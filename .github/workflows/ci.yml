@@ -9,11 +9,17 @@ on:
 jobs:
   build-and-scan:
     runs-on: ubuntu-latest
+    #permissions:
+    #  contents: read
+    #  security-events: write   # For uploading SARIF files (Trivy)
+    #  actions: read
+    #  contents: write          # Required for anchore/sbom-action to upload artifacts
+
     permissions:
-      contents: read
-      security-events: write   # For uploading SARIF files (Trivy)
+      contents: write           # Covers both read + write (needed for SBOM artifact upload)
+      security-events: write    # For Trivy SARIF upload
       actions: read
-      contents: write          # Required for anchore/sbom-action to upload artifacts
+
 
     steps:
       - name: Checkout code
